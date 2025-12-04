@@ -146,16 +146,16 @@
    * ① 設定を書くところ
    ***********************/
 
-  // ▼YouTube Data API v3 の APIキーを入れてください
+  // ▼YouTube Data API v3 の APIキー
   const YT_API_KEY = "AIzaSyBFKr3Lk7I3spmwUmVM_9cXTJ-M8jk_Obc";
 
-  // ▼Firebaseの設定を自分のプロジェクトのものに差し替えてください
+  // ▼Firebaseの設定（コンソールに出ているものをそのまま貼る）
   var firebaseConfig = {
     apiKey: "AIzaSyCvdOmOu-4EbyQ_P5AI1DtnjMpz38q0rK4",
     authDomain: "sync-c3237.firebaseapp.com",
     databaseURL: "https://sync-c3237-default-rtdb.firebaseio.com",
     projectId: "sync-c3237",
-    storageBucket: "sync-c3237.firebasestorage.app",
+    storageBucket: "sync-c3237.firebasestorage.app",          // ← appspot.com に変更推奨
     messagingSenderId: "502457623620",
     appId: "1:502457623620:web:0dceddec833878294dc811",
     measurementId: "G-9XS2YTMCYG"
@@ -170,11 +170,16 @@
   let lastAutoAdvanceAt = 0;
 
   (function initFirebaseSafely(){
+    console.log("initFirebaseSafely 実行開始");
     try{
       if (window.firebase) {
+        console.log("window.firebase は存在します");
         // すでに初期化済みかもしれないのでチェック
         if (firebase.apps && firebase.apps.length === 0) {
           firebase.initializeApp(firebaseConfig);
+          console.log("firebase.initializeApp 実行");
+        } else {
+          console.log("firebase はすでに初期化済み");
         }
         db = firebase.database();
         firebaseAvailable = true;
@@ -273,6 +278,7 @@
 
   // ルームに接続して、状態を購読
   function joinRoom(){
+    console.log("joinRoom が呼ばれました。firebaseAvailable=", firebaseAvailable, "db=", !!db);
     const input = document.getElementById('roomIdInput').value.trim();
     if(!input){
       alert("ルームIDを入力してください");
@@ -464,10 +470,5 @@
   window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
 </script>
 
-
 </body>
 </html>
-
-
-
-
