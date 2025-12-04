@@ -147,28 +147,41 @@
    ***********************/
 
   // ▼YouTube Data API v3 の APIキーを入れてください
-  //   （Google Cloudのコンソールで取得）
-  const YT_API_KEY = "AIzaSyBFKr3Lk7I3spmwUmVM_9cXTJ-M8jk_Obc";
+  const YT_API_KEY = "YOUR_YOUTUBE_API_KEY_HERE";
 
   // ▼Firebaseの設定を自分のプロジェクトのものに差し替えてください
-  //   Firebaseコンソール「設定アイコン -> プロジェクトの設定 -> 全般 -> マイアプリ(Webアプリ)」で
-  //   `const firebaseConfig = { ... }` の中身をコピペするイメージです。
   var firebaseConfig = {
-  apiKey: "AIzaSyCvdOmOu-4EbyQ_P5AI1DtnjMpz38q0rK4",
-  authDomain: "sync-c3237.firebaseapp.com",
-  databaseURL: "https://sync-c3237-default-rtdb.firebaseio.com/",
-  projectId: "sync-c3237",
-  storageBucket: "sync-c3237.firebasestorage.app",
-  messagingSenderId: "502457623620",
-  appId: "1:502457623620:web:0dceddec833878294dc811",
-  measurementId: "G-9XS2YTMCYG"
-}
+    apiKey: "YOUR_FIREBASE_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
   };
 
   // ==== ここから下は基本的にそのままでOK ==== //
 
-  firebase.initializeApp(firebaseConfig);
-  var db = firebase.database();
+  let firebaseAvailable = false;
+  let db = null;
+
+  (function initFirebaseSafely(){
+    try{
+      if (window.firebase) {
+        // すでに初期化済みかもしれないのでチェック
+        if (firebase.apps && firebase.apps.length === 0) {
+          firebase.initializeApp(firebaseConfig);
+        }
+        db = firebase.database();
+        firebaseAvailable = true;
+        console.log("Firebase 初期化 OK");
+      } else {
+        console.error("Firebase ライブラリが読み込まれていません");
+      }
+    }catch(e){
+      console.error("Firebase 初期化エラー:", e);
+    }
+  })();
 
   let roomId = null;
   let roomRef = null;
@@ -207,7 +220,6 @@
     const trimmed = input.trim();
     if(!trimmed) return "";
 
-    // URLとして解釈できる場合は検索パラメータlistを使う
     try{
       const u = new URL(trimmed);
       const listParam = u.searchParams.get("list");
@@ -243,6 +255,13 @@
       return;
     }
     roomId = input;
+
+    if(!firebaseAvailable || !db){
+      setRoomStatus("ルームID「" + roomId + "」を受け取りましたが、Firebase初期化に失敗しているため同期はできません。ブラウザのコンソールのエラーを確認してください。");
+      console.error("Firebase が利用できないため、room に接続できません。");
+      return;
+    }
+
     roomRef = db.ref("rooms/" + roomId + "/state");
 
     // すでにリスナーが付いていたら一度外す（再接続用）
@@ -273,12 +292,11 @@
     const videoId = latestState.currentVideoId;
     const startedAt = latestState.startedAt || Date.now();
     const now = Date.now();
-    const offsetSec = Math.max(0, Math.floor((now - startedAt) / 1000)); // 経過秒数
+    const offsetSec = Math.max(0, Math.floor((now - startedAt) / 1000));
 
     setCurrentVideoText(videoId);
 
     if(player && playerReady){
-      // 再生位置を揃えようとする
       player.loadVideoById(videoId, offsetSec);
       if(playerManuallyEnabled){
         player.playVideo();
@@ -288,8 +306,8 @@
 
   // ランダムに1曲選んで、ルームのstateを書き換え
   async function chooseRandomAndBroadcast(){
-    if(!roomRef){
-      alert("先にルームIDを入力して「このルームに接続」を押してください");
+    if(!roomRef || !firebaseAvailable){
+      alert("先にルームIDを入力して「このルームに接続」を押してください（Firebase初期化も必要です）");
       return;
     }
     const playlistInput = document.getElementById('playlistInput').value;
@@ -338,7 +356,6 @@
       events: {
         'onReady': function(){
           playerReady = true;
-          // もし先にstateが来ていたら反映
           applyStateIfPossible();
         }
       }
@@ -369,5 +386,7 @@
   // グローバルに公開（YouTube IFrame API用）
   window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
 </script>
+
 </body>
 </html>
+
