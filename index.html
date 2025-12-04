@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>二人で聴く YouTube 同期プレイヤー（簡易版）</title>
+
+  <style>
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,"Hiragino Kaku Gothic ProN",Meiryo,Arial;
+      background:#0f1724;
+      color:#e6eef8;
+    }
+    .wrap{
+      max-width:960px;
+      margin:0 auto;
+      padding:16px;
+    }
+    h1{
+      font-size:22px;
+      margin:0 0 4px;
+    }
+    .sub{
+      font-size:13px;
+      color:#9fb0c9;
+      margin-bottom:16px;
+    }
+    label{
+      font-size:13px;
+      color:#9fb0c9;
+      display:block;
+      margin:8px 0 4px;
+    }
+    input[type="text"]{
+      width:100%;
+      padding:8px 10px;
+      border-radius:6px;
+      border:1px solid #253552;
+      background:#050816;
+      color:#e6eef8;
+      box-sizing:border-box;
+    }
+    button{
+      padding:10px 16px;
+      border-radius:999px;
+      border:none;
+      background:#ffb86b;
+      color:#111827;
+      font-size:14px;
+      font-weight:600;
+      cursor:pointer;
+      margin-top:8px;
+      margin-right:8px;
+    }
+    button.secondary{
+      background:#111827;
+      color:#e6eef8;
+      border:1px solid #253552;
+    }
+    button:disabled{
+      opacity:0.5;
+      cursor:default;
+    }
+    .row{
+      margin-bottom:16px;
+      padding:12px;
+      border-radius:10px;
+      background:#050816;
+      border:1px solid #1f2937;
+    }
+    .status{
+      font-size:12px;
+      color:#9fb0c9;
+      margin-top:4px;
+      min-height:18px;
+    }
+    .current-link{
+      margin-top:8px;
+      font-size:14px;
+      word-break:break-all;
+    }
+    a{
+      color:#93c5fd;
+    }
+    #player-box{
+      margin-top:16px;
+      padding:12px;
+      border-radius:10px;
+      background:#050816;
+      border:1px solid #1f2937;
+    }
+  </style>
+
+  <!-- Firebase v8 CDN -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+  <!-- YouTube IFrame Player API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+</head>
+<body>
+<div class="wrap">
+  <h1>二人で聴く YouTube 同期プレイヤー（簡易版）</h1>
+  <div class="sub">
+    1) 同じ「ルームID」で接続<br>
+    2) 片方がプレイリストURLを入れてランダム選曲<br>
+    3) 2人の画面に同じ動画＆リンクが出ます（ほぼ同じタイミングで再生）
+  </div>
+
+  <div class="row">
+    <label for="roomIdInput">ルームID（2人で同じ文字列を入れる）</label>
+    <input id="roomIdInput" type="text" placeholder="例）test-room-1" />
+    <button id="joinBtn">このルームに接続</button>
+    <div class="status" id="roomStatus"></div>
+  </div>
+
+  <div class="row">
+    <label for="playlistInput">YouTube プレイリストURL か プレイリストID</label>
+    <input id="playlistInput" type="text"
+           placeholder="例）https://www.youtube.com/playlist?list=xxxxxxxx  または  PLxxxxxx" />
+    <button id="randomBtn" disabled>ランダムに1曲選んで全員に送る</button>
+    <div class="status" id="playlistStatus"></div>
+  </div>
+
+  <div class="row">
+    <button id="enablePlayerBtn" class="secondary">プレイヤーを有効化（最初に1回）</button>
+    <div class="status">
+      ※ ブラウザの自動再生制限の都合で、<br>
+      最初にこのボタンを押してから使うと比較的スムーズです。
+    </div>
+  </div>
+
+  <div class="row">
+    <div>現在の曲：</div>
+    <div class="current-link" id="currentVideoText">まだ選ばれていません</div>
+  </div>
+
+  <div id="player-box">
+    <div id="player"></div>
+  </div>
+</div>
+
+<script>
+  /***********************
+   * ① 設定を書くところ
+   ***********************/
+
+  // ▼YouTube Data API v3 の APIキーを入れてください
+  //   （Google Cloudのコンソールで取得）
+  const YT_API_KEY = "AIzaSyBFKr3Lk7I3spmwUmVM_9cXTJ-M8jk_Obc";
+
+  // ▼Firebaseの設定を自分のプロジェクトのものに差し替えてください
+  //   Firebaseコンソール「設定アイコン -> プロジェクトの設定 -> 全般 -> マイアプリ(Webアプリ)」で
+  //   `const firebaseConfig = { ... }` の中身をコピペするイメージです。
+  var firebaseConfig = {
+  apiKey: "AIzaSyCvdOmOu-4EbyQ_P5AI1DtnjMpz38q0rK4",
+  authDomain: "sync-c3237.firebaseapp.com",
+  databaseURL: "https://sync-c3237-default-rtdb.firebaseio.com/",
+  projectId: "sync-c3237",
+  storageBucket: "sync-c3237.firebasestorage.app",
+  messagingSenderId: "502457623620",
+  appId: "1:502457623620:web:0dceddec833878294dc811",
+  measurementId: "G-9XS2YTMCYG"
+}
+  };
+
+  // ==== ここから下は基本的にそのままでOK ==== //
+
+  firebase.initializeApp(firebaseConfig);
+  var db = firebase.database();
+
+  let roomId = null;
+  let roomRef = null;
+  let latestState = null;
+
+  let player = null;
+  let playerReady = false;
+  let playerManuallyEnabled = false;
+
+  const joinBtn = document.getElementById('joinBtn');
+  const randomBtn = document.getElementById('randomBtn');
+  const enablePlayerBtn = document.getElementById('enablePlayerBtn');
+  const roomStatus = document.getElementById('roomStatus');
+  const playlistStatus = document.getElementById('playlistStatus');
+  const currentVideoText = document.getElementById('currentVideoText');
+
+  function setRoomStatus(msg){
+    roomStatus.textContent = msg || "";
+  }
+  function setPlaylistStatus(msg){
+    playlistStatus.textContent = msg || "";
+  }
+  function setCurrentVideoText(videoId){
+    if(!videoId){
+      currentVideoText.textContent = "まだ選ばれていません";
+      return;
+    }
+    const url = "https://www.youtube.com/watch?v=" + videoId;
+    currentVideoText.innerHTML =
+      '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' +
+      url + '</a>';
+  }
+
+  // プレイリストURLから playlistId を抜き出す簡易関数
+  function extractPlaylistId(input){
+    const trimmed = input.trim();
+    if(!trimmed) return "";
+
+    // URLとして解釈できる場合は検索パラメータlistを使う
+    try{
+      const u = new URL(trimmed);
+      const listParam = u.searchParams.get("list");
+      if(listParam) return listParam;
+    }catch(e){
+      // URLでなければそのままIDとして扱う
+    }
+    return trimmed;
+  }
+
+  // YouTube Data API でプレイリストの動画ID一覧を取得（最大50件）
+  async function loadPlaylistVideoIds(playlistId){
+    const url =
+      "https://www.googleapis.com/youtube/v3/playlistItems" +
+      "?part=contentDetails&maxResults=50" +
+      "&playlistId=" + encodeURIComponent(playlistId) +
+      "&key=" + encodeURIComponent(YT_API_KEY);
+
+    const res = await fetch(url);
+    if(!res.ok){
+      throw new Error("YouTube API エラー: " + res.status);
+    }
+    const data = await res.json();
+    const items = data.items || [];
+    return items.map(it => it.contentDetails.videoId).filter(Boolean);
+  }
+
+  // ルームに接続して、状態を購読
+  function joinRoom(){
+    const input = document.getElementById('roomIdInput').value.trim();
+    if(!input){
+      alert("ルームIDを入力してください");
+      return;
+    }
+    roomId = input;
+    roomRef = db.ref("rooms/" + roomId + "/state");
+
+    // すでにリスナーが付いていたら一度外す（再接続用）
+    roomRef.off();
+
+    // 状態の購読
+    roomRef.on("value", snapshot => {
+      const state = snapshot.val();
+      latestState = state;
+      applyStateIfPossible();
+      if(state && state.currentVideoId){
+        setRoomStatus("ルーム「" + roomId + "」に接続済み / 曲が選ばれました");
+      }else{
+        setRoomStatus("ルーム「" + roomId + "」に接続済み / まだ曲は選ばれていません");
+      }
+    });
+
+    randomBtn.disabled = false;
+    setRoomStatus("ルーム「" + roomId + "」に接続しました（状態待機中）");
+  }
+
+  // DBの状態とプレイヤー状況がそろったら適用
+  function applyStateIfPossible(){
+    if(!latestState || !latestState.currentVideoId){
+      setCurrentVideoText("");
+      return;
+    }
+    const videoId = latestState.currentVideoId;
+    const startedAt = latestState.startedAt || Date.now();
+    const now = Date.now();
+    const offsetSec = Math.max(0, Math.floor((now - startedAt) / 1000)); // 経過秒数
+
+    setCurrentVideoText(videoId);
+
+    if(player && playerReady){
+      // 再生位置を揃えようとする
+      player.loadVideoById(videoId, offsetSec);
+      if(playerManuallyEnabled){
+        player.playVideo();
+      }
+    }
+  }
+
+  // ランダムに1曲選んで、ルームのstateを書き換え
+  async function chooseRandomAndBroadcast(){
+    if(!roomRef){
+      alert("先にルームIDを入力して「このルームに接続」を押してください");
+      return;
+    }
+    const playlistInput = document.getElementById('playlistInput').value;
+    const playlistId = extractPlaylistId(playlistInput);
+    if(!playlistId){
+      alert("プレイリストURLかIDを入力してください");
+      return;
+    }
+    if(!YT_API_KEY || YT_API_KEY === "YOUR_YOUTUBE_API_KEY_HERE"){
+      alert("先にコード内の YT_API_KEY を自分のAPIキーに書き換えてください");
+      return;
+    }
+
+    try{
+      setPlaylistStatus("プレイリスト読み込み中…");
+      const ids = await loadPlaylistVideoIds(playlistId);
+      if(!ids.length){
+        setPlaylistStatus("動画が見つかりませんでした");
+        return;
+      }
+      const randomIndex = Math.floor(Math.random() * ids.length);
+      const videoId = ids[randomIndex];
+
+      const now = Date.now();
+      await roomRef.set({
+        currentVideoId: videoId,
+        startedAt: now
+      });
+      setPlaylistStatus("ランダムに1曲選んで全員に送信しました");
+    }catch(e){
+      console.error(e);
+      setPlaylistStatus("エラーが発生しました: " + e.message);
+    }
+  }
+
+  // YouTube IFrame API から呼ばれるグローバル関数
+  function onYouTubeIframeAPIReady(){
+    player = new YT.Player('player', {
+      height: '315',
+      width: '560',
+      videoId: '',
+      playerVars: {
+        rel: 0,
+        playsinline: 1
+      },
+      events: {
+        'onReady': function(){
+          playerReady = true;
+          // もし先にstateが来ていたら反映
+          applyStateIfPossible();
+        }
+      }
+    });
+  }
+
+  // ブラウザの「ユーザー操作」を与えて自動再生制限を多少緩めるボタン
+  function enablePlayer(){
+    if(player && playerReady){
+      try{
+        player.playVideo();
+        player.pauseVideo();
+      }catch(e){
+        console.warn(e);
+      }
+      playerManuallyEnabled = true;
+      alert("プレイヤーを有効化しました。以降は曲が切り替わると自動で再生されやすくなります。");
+    }else{
+      alert("プレイヤーの読み込み中です。数秒待ってからもう一度押してください。");
+    }
+  }
+
+  // イベント紐付け
+  joinBtn.addEventListener('click', joinRoom);
+  randomBtn.addEventListener('click', chooseRandomAndBroadcast);
+  enablePlayerBtn.addEventListener('click', enablePlayer);
+
+  // グローバルに公開（YouTube IFrame API用）
+  window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
+</script>
+</body>
+</html>
