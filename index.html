@@ -151,14 +151,14 @@
 
   // ▼Firebaseの設定を自分のプロジェクトのものに差し替えてください
   var firebaseConfig = {
-  apiKey: "AIzaSyCvdOmOu-4EbyQ_P5AI1DtnjMpz38q0rK4",
-  authDomain: "sync-c3237.firebaseapp.com",
-  databaseUPL: "https://sync-c3237-default-rtdb.firebaseio.com",
-  projectId: "sync-c3237",
-  storageBucket: "sync-c3237.firebasestorage.app",
-  messagingSenderId: "502457623620",
-  appId: "1:502457623620:web:0dceddec833878294dc811",
-  measurementId: "G-9XS2YTMCYG"
+    apiKey: "AIzaSyCvdOmOu-4EbyQ_P5AI1DtnjMpz38q0rK4",
+    authDomain: "sync-c3237.firebaseapp.com",
+    databaseURL: "https://sync-c3237-default-rtdb.firebaseio.com",
+    projectId: "sync-c3237",
+    storageBucket: "sync-c3237.firebasestorage.app",
+    messagingSenderId: "502457623620",
+    appId: "1:502457623620:web:0dceddec833878294dc811",
+    measurementId: "G-9XS2YTMCYG"
   };
 
   // ==== ここから下は基本的にそのままでOK ==== //
@@ -168,10 +168,6 @@
 
   // 連続で次の曲に行きすぎないためのクールダウン
   let lastAutoAdvanceAt = 0;
-
-
-  let firebaseAvailable = false;
-  let db = null;
 
   (function initFirebaseSafely(){
     try{
@@ -237,43 +233,43 @@
     }
     return trimmed;
   }
-  
- // YouTube Data API でプレイリストの動画ID一覧を「最大 maxCount 件」まで全部取得
-async function loadPlaylistVideoIds(playlistId, maxCount = 500){
-  let allIds = [];
-  let pageToken = "";
 
-  while (true) {
-    const url =
-      "https://www.googleapis.com/youtube/v3/playlistItems" +
-      "?part=contentDetails&maxResults=50" +
-      "&playlistId=" + encodeURIComponent(playlistId) +
-      "&key=" + encodeURIComponent(YT_API_KEY) +
-      (pageToken ? "&pageToken=" + encodeURIComponent(pageToken) : "");
+  // YouTube Data API でプレイリストの動画ID一覧を「最大 maxCount 件」まで全部取得
+  async function loadPlaylistVideoIds(playlistId, maxCount = 500){
+    let allIds = [];
+    let pageToken = "";
 
-    const res = await fetch(url);
-    if (!res.ok) {
-      throw new Error("YouTube API エラー: " + res.status);
+    while (true) {
+      const url =
+        "https://www.googleapis.com/youtube/v3/playlistItems" +
+        "?part=contentDetails&maxResults=50" +
+        "&playlistId=" + encodeURIComponent(playlistId) +
+        "&key=" + encodeURIComponent(YT_API_KEY) +
+        (pageToken ? "&pageToken=" + encodeURIComponent(pageToken) : "");
+
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error("YouTube API エラー: " + res.status);
+      }
+      const data = await res.json();
+      const items = data.items || [];
+
+      const ids = items
+        .map(it => it.contentDetails && it.contentDetails.videoId)
+        .filter(Boolean);
+
+      allIds.push(...ids);
+
+      // これ以上ページがない or 上限に達したら終了
+      if (!data.nextPageToken || allIds.length >= maxCount) {
+        break;
+      }
+      pageToken = data.nextPageToken;
     }
-    const data = await res.json();
-    const items = data.items || [];
 
-    const ids = items
-      .map(it => it.contentDetails && it.contentDetails.videoId)
-      .filter(Boolean);
-
-    allIds.push(...ids);
-
-    // これ以上ページがない or 上限に達したら終了
-    if (!data.nextPageToken || allIds.length >= maxCount) {
-      break;
-    }
-    pageToken = data.nextPageToken;
+    // 念のため maxCount で切って返す
+    return allIds.slice(0, maxCount);
   }
-
-  // 念のため maxCount で切って返す
-  return allIds.slice(0, maxCount);
-}
 
   // ルームに接続して、状態を購読
   function joinRoom(){
@@ -370,7 +366,8 @@ async function loadPlaylistVideoIds(playlistId, maxCount = 500){
       setPlaylistStatus("エラーが発生しました: " + e.message);
     }
   }
-    // 曲が終わったときに自動で次の曲に進める（ホストだけ動く）
+
+  // 曲が終わったときに自動で次の曲に進める（ホストだけ動く）
   async function autoNextFromPlaylist(){
     // Firebaseやルーム未接続なら何もしない
     if (!roomRef || !firebaseAvailable) return;
@@ -413,7 +410,7 @@ async function loadPlaylistVideoIds(playlistId, maxCount = 500){
     }
   }
 
-    // プレイヤーの状態が変わったときに呼ばれる
+  // プレイヤーの状態が変わったときに呼ばれる
   function onPlayerStateChange(event){
     // 再生が「終了」したとき
     if (event.data === YT.PlayerState.ENDED) {
@@ -421,7 +418,6 @@ async function loadPlaylistVideoIds(playlistId, maxCount = 500){
       autoNextFromPlaylist();
     }
   }
-
 
   // YouTube IFrame API から呼ばれるグローバル関数
   function onYouTubeIframeAPIReady(){
@@ -468,8 +464,10 @@ async function loadPlaylistVideoIds(playlistId, maxCount = 500){
   window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
 </script>
 
+
 </body>
 </html>
+
 
 
 
