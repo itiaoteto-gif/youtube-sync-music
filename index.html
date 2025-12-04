@@ -166,6 +166,13 @@
   let firebaseAvailable = false;
   let db = null;
 
+  // 連続で次の曲に行きすぎないためのクールダウン
+  let lastAutoAdvanceAt = 0;
+
+
+  let firebaseAvailable = false;
+  let db = null;
+
   (function initFirebaseSafely(){
     try{
       if (window.firebase) {
@@ -363,6 +370,58 @@ async function loadPlaylistVideoIds(playlistId, maxCount = 500){
       setPlaylistStatus("エラーが発生しました: " + e.message);
     }
   }
+    // 曲が終わったときに自動で次の曲に進める（ホストだけ動く）
+  async function autoNextFromPlaylist(){
+    // Firebaseやルーム未接続なら何もしない
+    if (!roomRef || !firebaseAvailable) return;
+
+    const playlistInputEl = document.getElementById('playlistInput');
+    if (!playlistInputEl) return;
+
+    const playlistInput = playlistInputEl.value;
+    const playlistId = extractPlaylistId(playlistInput);
+    if (!playlistId) return;  // プレイリストが入力されていない端末では自動進行しない
+
+    if (!YT_API_KEY || YT_API_KEY === "YOUR_YOUTUBE_API_KEY_HERE"){
+      // APIキー未設定なら自動進行しない
+      return;
+    }
+
+    const now = Date.now();
+    // 5秒以内に連続で呼ばれたら無視（多重実行防止）
+    if (now - lastAutoAdvanceAt < 5000) return;
+    lastAutoAdvanceAt = now;
+
+    try{
+      console.log("autoNextFromPlaylist: プレイリストから次の曲を選びます");
+      const ids = await loadPlaylistVideoIds(playlistId, 1000);
+      if (!ids.length) {
+        console.warn("autoNextFromPlaylist: プレイリストに動画がありません");
+        return;
+      }
+
+      const randomIndex = Math.floor(Math.random() * ids.length);
+      const videoId = ids[randomIndex];
+
+      await roomRef.set({
+        currentVideoId: videoId,
+        startedAt: Date.now()
+      });
+      setPlaylistStatus("曲が終わったので、自動で次の曲を選びました");
+    }catch(e){
+      console.error("autoNextFromPlaylist エラー:", e);
+    }
+  }
+
+    // プレイヤーの状態が変わったときに呼ばれる
+  function onPlayerStateChange(event){
+    // 再生が「終了」したとき
+    if (event.data === YT.PlayerState.ENDED) {
+      console.log("曲が再生し終わりました。次の曲に進めます。");
+      autoNextFromPlaylist();
+    }
+  }
+
 
   // YouTube IFrame API から呼ばれるグローバル関数
   function onYouTubeIframeAPIReady(){
@@ -378,7 +437,8 @@ async function loadPlaylistVideoIds(playlistId, maxCount = 500){
         'onReady': function(){
           playerReady = true;
           applyStateIfPossible();
-        }
+        },
+        'onStateChange': onPlayerStateChange
       }
     });
   }
@@ -410,5 +470,6 @@ async function loadPlaylistVideoIds(playlistId, maxCount = 500){
 
 </body>
 </html>
+
 
 
