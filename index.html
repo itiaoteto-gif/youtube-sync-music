@@ -230,23 +230,43 @@
     }
     return trimmed;
   }
+  
+ // YouTube Data API でプレイリストの動画ID一覧を「最大 maxCount 件」まで全部取得
+async function loadPlaylistVideoIds(playlistId, maxCount = 500){
+  let allIds = [];
+  let pageToken = "";
 
-  // YouTube Data API でプレイリストの動画ID一覧を取得（最大50件）
-  async function loadPlaylistVideoIds(playlistId){
+  while (true) {
     const url =
       "https://www.googleapis.com/youtube/v3/playlistItems" +
       "?part=contentDetails&maxResults=50" +
       "&playlistId=" + encodeURIComponent(playlistId) +
-      "&key=" + encodeURIComponent(YT_API_KEY);
+      "&key=" + encodeURIComponent(YT_API_KEY) +
+      (pageToken ? "&pageToken=" + encodeURIComponent(pageToken) : "");
 
     const res = await fetch(url);
-    if(!res.ok){
+    if (!res.ok) {
       throw new Error("YouTube API エラー: " + res.status);
     }
     const data = await res.json();
     const items = data.items || [];
-    return items.map(it => it.contentDetails.videoId).filter(Boolean);
+
+    const ids = items
+      .map(it => it.contentDetails && it.contentDetails.videoId)
+      .filter(Boolean);
+
+    allIds.push(...ids);
+
+    // これ以上ページがない or 上限に達したら終了
+    if (!data.nextPageToken || allIds.length >= maxCount) {
+      break;
+    }
+    pageToken = data.nextPageToken;
   }
+
+  // 念のため maxCount で切って返す
+  return allIds.slice(0, maxCount);
+}
 
   // ルームに接続して、状態を購読
   function joinRoom(){
@@ -324,7 +344,7 @@
 
     try{
       setPlaylistStatus("プレイリスト読み込み中…");
-      const ids = await loadPlaylistVideoIds(playlistId);
+      const ids = await loadPlaylistVideoIds(playlistId, 1000);
       if(!ids.length){
         setPlaylistStatus("動画が見つかりませんでした");
         return;
@@ -390,4 +410,5 @@
 
 </body>
 </html>
+
 
